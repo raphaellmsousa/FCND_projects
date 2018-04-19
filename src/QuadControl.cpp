@@ -77,7 +77,7 @@ VehicleCommand QuadControl::GenerateMotorCommands(float collThrustCmd, V3F momen
 
   float tau_x = momentCmd.x;
   float tau_y = momentCmd.y;
-  float tau_z = 0; //momentCmd.z;
+  float tau_z = momentCmd.z;
 
   float F_x = tau_x / l;
   float F_y = tau_y / l;
@@ -128,6 +128,8 @@ V3F QuadControl::BodyRateControl(V3F pqrCmd, V3F pqr)
   I.z = Izz;
   momentCmd = I * kpPQR * ( pqrCmd - pqr );
 
+  //printf("momentCmd= %f %f %f\n",momentCmd.x, momentCmd.y, momentCmd.z);
+
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
   return momentCmd;
@@ -166,11 +168,11 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
       accelCmd.y = acc_limit.y;
 
   float b_x = R(0,2); //R13
-  float b_x_err = accelCmd.x - b_x;
+  float b_x_err = accelCmd.x/acc_limit.x - b_x;
   float b_x_p_term = kpBank * b_x_err;
 
   float b_y = R(1,2); //R23
-  float b_y_err = accelCmd.y - b_y;
+  float b_y_err = accelCmd.y/acc_limit.y - b_y;
   float b_y_p_term = kpBank * b_y_err;
 
   Mat3x3F rot_mat1;
@@ -237,8 +239,6 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
 
   float u = ( u_1_bar - CONST_GRAVITY ) / b_z;
 
-  float k = 1;
-
   if(accelZCmd<0)
       if(abs(velZCmd)>maxAscentRate)
           velZCmd = -maxAscentRate;
@@ -246,7 +246,9 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
       if(velZCmd>maxDescentRate)
           velZCmd = maxDescentRate;
 
-  thrust = - u * k;
+  thrust = - u * mass;
+
+  //printf("thrust= %f\n", thrust);
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
