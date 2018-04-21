@@ -13,7 +13,11 @@
 #include <systemlib/param/param.h>
 #endif
 
-float i_term = 0;
+float i_term = 0.;
+float velZ_1 = 0.;
+float velZ_2 = 0.;
+
+float t = 0.;
 
 void QuadControl::Init()
 {
@@ -79,8 +83,8 @@ VehicleCommand QuadControl::GenerateMotorCommands(float collThrustCmd, V3F momen
   float tau_y = momentCmd.y;
   float tau_z = momentCmd.z;
 
-  float F_x = tau_x / l;
-  float F_y = tau_y / l;
+  float F_x = tau_x / L;
+  float F_y = tau_y / L;
   float F_z = - tau_z / kappa;
   float F_total = collThrustCmd;
 
@@ -162,11 +166,6 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
   V3F acc_limit;
   acc_limit = collThrustCmd / mass;
 
-  if(accelCmd.x>=acc_limit.x)
-      accelCmd.x = acc_limit.x;
-  if(accelCmd.y>=acc_limit.y)
-      accelCmd.y = acc_limit.y;
-
   float b_x = R(0,2); //R13
   float b_x_err = accelCmd.x/acc_limit.x - b_x;
   float b_x_p_term = kpBank * b_x_err;
@@ -174,6 +173,8 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
   float b_y = R(1,2); //R23
   float b_y_err = accelCmd.y/acc_limit.y - b_y;
   float b_y_p_term = kpBank * b_y_err;
+
+  //printf("accelCmd= %f\n", accelCmd.y);
 
   Mat3x3F rot_mat1;
   rot_mat1(0,0) = R(1,0);
@@ -229,9 +230,12 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
 
   float p_term = kpPosZ * z_err;
   float d_term = kpVelZ * z_dot_err;
-  i_term = i_term + z_dot_err * dt;
+  i_term =+ z_err * dt;
 
-  i_term = i_term * KiPosZ;
+  i_term = i_term;
+
+  accelZCmd = (velZ_2 - velZCmd)/dt;
+  velZ_2 = velZCmd;
 
   float b_z = R(2,2);
 
@@ -241,14 +245,16 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
 
   if(accelZCmd<0)
       if(abs(velZCmd)>maxAscentRate)
-          velZCmd = -maxAscentRate;
+          velZCmd = maxAscentRate;
   if(accelZCmd>=0)
       if(velZCmd>maxDescentRate)
           velZCmd = maxDescentRate;
 
   thrust = - u * mass;
 
-  //printf("thrust= %f\n", thrust);
+  t = t + dt;
+
+  //printf("time= %f\n", t);
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
@@ -298,11 +304,13 @@ V3F QuadControl::LateralPositionControl(V3F posCmd, V3F velCmd, V3F pos, V3F vel
   capVelCmd.z = 0.f;
 
   V3F accel;
-  accel = kpPos * ( posCmd - pos ) + kpVel * ( capVelCmd - vel ) + accelCmd;
+  accelCmd = kpPos * ( posCmd - pos ) + kpVel * ( capVelCmd - vel ) + accelCmd;
+
+  //printf("accelCmd %f\n", accelCmd);
 
   V3F capaccel;
-  capaccel.x = - CONSTRAIN(accel.x, -maxAccelXY, maxAccelXY);
-  capaccel.y = - CONSTRAIN(accel.y, -maxAccelXY, maxAccelXY);
+  capaccel.x = - CONSTRAIN(accelCmd.x, -maxAccelXY, maxAccelXY);
+  capaccel.y = - CONSTRAIN(accelCmd.y, -maxAccelXY, maxAccelXY);
   capaccel.z = 0;
 
   capaccel = capaccel;
@@ -341,6 +349,8 @@ float QuadControl::YawControl(float yawCmd, float yaw)
 VehicleCommand QuadControl::RunControl(float dt, float simTime)
 {
   curTrajPoint = GetNextTrajectoryPoint(simTime);
+
+  //printf("curTrajPoint.position.z %f\n", curTrajPoint.accel.z);
 
   float collThrustCmd = AltitudeControl(curTrajPoint.position.z, curTrajPoint.velocity.z, estPos.z, estVel.z, estAtt, curTrajPoint.accel.z, dt);
 
