@@ -166,15 +166,16 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
   V3F acc_limit;
   acc_limit = collThrustCmd / mass;
 
+  float kpBank_x = kpBank;
+
   float b_x = R(0,2); //R13
   float b_x_err = accelCmd.x/acc_limit.x - b_x;
+
   float b_x_p_term = kpBank * b_x_err;
 
   float b_y = R(1,2); //R23
   float b_y_err = accelCmd.y/acc_limit.y - b_y;
-  float b_y_p_term = kpBank * b_y_err;
-
-  //printf("accelCmd= %f\n", accelCmd.y);
+  float b_y_p_term = 15 * b_y_err;
 
   Mat3x3F rot_mat1;
   rot_mat1(0,0) = R(1,0);
@@ -228,33 +229,40 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
   float z_err = posZCmd - posZ;
   float z_dot_err = velZCmd - velZ;
 
+  float kpPosZ_up_limit = 80.;
+  float kpPosZ_down_limit = 18.;
+
+  if (abs(z_err)>=0.05)
+      kpPosZ = kpPosZ + 0.085;
+
+  else if(abs(z_err)<0.05 && abs(z_err)>0.01)
+      kpPosZ = kpPosZ - 0.8;
+
+  if (kpPosZ > kpPosZ_up_limit)
+      kpPosZ = kpPosZ_up_limit;
+
+  else if (kpPosZ<kpPosZ_down_limit)
+      kpPosZ = kpPosZ_down_limit;
+
+  //printf("kpPosZ %f\n", kpPosZ);
+
   float p_term = kpPosZ * z_err;
   float d_term = kpVelZ * z_dot_err;
-  i_term =+ z_err * dt;
+  integratedAltitudeError =+ z_err * dt;
 
-  i_term = i_term;
-
-  accelZCmd = (velZ_2 - velZCmd)/dt;
-  velZ_2 = velZCmd;
+  i_term = integratedAltitudeError * KiPosZ;
 
   float b_z = R(2,2);
 
-  float u_1_bar = p_term + i_term + d_term + accelZCmd;
+  float u_1_bar = p_term + d_term + i_term;
 
   float u = ( u_1_bar - CONST_GRAVITY ) / b_z;
 
-  if(accelZCmd<0)
-      if(abs(velZCmd)>maxAscentRate)
-          velZCmd = maxAscentRate;
-  if(accelZCmd>=0)
-      if(velZCmd>maxDescentRate)
-          velZCmd = maxDescentRate;
+  float acc = CONSTRAIN(u, -maxAscentRate / dt, maxDescentRate / dt);
 
-  thrust = - u * mass;
+  thrust = - acc * mass;
 
-  t = t + dt;
-
-  //printf("time= %f\n", t);
+  //t = t + dt;
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
